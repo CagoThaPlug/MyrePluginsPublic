@@ -16,9 +16,15 @@ import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
 
 import javax.inject.Inject;
 
+@PluginDescriptor(
+        name = "Construction Fire Sale",
+        description = "Builds and removes elemental balance for construction xp",
+        tags = {"construction", "leagues", "firesale", "myre", "cago"}
+)
 public class ConFireSale extends Plugin {
 
     @Inject

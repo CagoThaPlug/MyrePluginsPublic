@@ -151,4 +151,12 @@ public class ItemQuery {
         ItemComposition itemComposition = EthanApiPlugin.itemDefs.get(item.getItemId());
         return itemComposition.isStackable();
     }
+
+    public ItemQuery withIds(int... ids){
+        List<Integer> listIds = new ArrayList<>();
+        for (int i : ids){
+            listIds.add(i);
+        }
+        return idInList(listIds);
+    }
 }
