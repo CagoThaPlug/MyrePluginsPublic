@@ -1,12 +1,12 @@
 package com.example.PacketUtils;
 
 import com.example.Packets.BufferMethods;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.client.RuneLite;
 
-import javax.inject.Inject;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -15,66 +15,122 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class PacketReflection {
-    public static Class classWithgetPacketBufferNode = null;
-    public static Method getPacketBufferNode = null;
-    public static Class ClientPacket = null;
-    public static Class isaacClass = null;
-    public static Class PacketBufferNode = null;
-    public static Field PACKETWRITER = null;
-    public static Object isaac = null;
-
-
-    @Inject
-    Client clientInstance;
-    public static Client client = null;
-
-    @SneakyThrows
-    public boolean LoadPackets() {
+    public static Client getClient(){
+        return RuneLite.getInjector().getInstance(Client.class);
+    }
+    public static Class loadClassFromClientClassLoader(String name){
         try {
-            client = clientInstance;
-            classWithgetPacketBufferNode = clientInstance.getClass().getClassLoader().loadClass(ObfuscatedNames.classContainingGetPacketBufferNodeName);
-            ClientPacket = clientInstance.getClass().getClassLoader().loadClass(ObfuscatedNames.clientPacketClassName);
-            PACKETWRITER = clientInstance.getClass().getDeclaredField(ObfuscatedNames.packetWriterFieldName);
-//            //Devious fix for logout issue
-//            Field ju = clientInstance.getClass().getDeclaredField("ju");
-//            ju.setAccessible(true);
-//            ju.set(null,Integer.MAX_VALUE);
-//            ju.setAccessible(false);
-//            //Devious fix for logout issue
-            PacketBufferNode = clientInstance.getClass().getClassLoader().loadClass(ObfuscatedNames.packetBufferNodeClassName);
-
-            PACKETWRITER.setAccessible(true);
-            Field isaac2 = PACKETWRITER.get(null).getClass().getDeclaredField(ObfuscatedNames.isaacCipherFieldName);
-            isaac2.setAccessible(true);
-            isaac = isaac2.get(PACKETWRITER.get(null));
-            isaac2.setAccessible(false);
-            PACKETWRITER.setAccessible(false);
-            isaacClass = isaac.getClass();
-            getPacketBufferNode = Arrays.stream(classWithgetPacketBufferNode.getDeclaredMethods()).filter(m -> m.getReturnType().equals(PacketBufferNode)).collect(Collectors.toList()).get(0);
+            ClassLoader clientLoader = getClient().getClass().getClassLoader();
+            return clientLoader.loadClass(name);
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    public static Class getClassWithGetPacketBufferNode(){
+        return loadClassFromClientClassLoader(ObfuscatedNames.classContainingGetPacketBufferNodeName);
+    }
+    public static Method getGetPacketBufferNode(){
+        try {
+            return Arrays.stream(getClassWithGetPacketBufferNode().getDeclaredMethods()).filter(m -> m.getReturnType().equals(getPacketBufferNodeClass())).collect(Collectors.toList()).get(0);
         } catch (Exception e) {
             e.printStackTrace();
-            log.warn("Failed to load Into Client");
-            return false;
         }
-        return true;
+        return null;
+    }
+    public static Class getClientPacketClass(){
+        return loadClassFromClientClassLoader(ObfuscatedNames.clientPacketClassName);
+    }
+    public static Field getPacketWriterField() {
+        try {
+            return getClient().getClass().getDeclaredField(ObfuscatedNames.packetWriterFieldName);
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    public static Class getPacketWriterClass(){
+        try {
+            Field packetWriterField = getPacketWriterField();
+            packetWriterField.setAccessible(true);
+            Class packetWriterClass = packetWriterField.get(null).getClass();
+            packetWriterField.setAccessible(false);
+            return packetWriterClass;
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    public static Object getIsaacObject(){
+        try {
+            Field isaacField = getPacketWriterClass().getDeclaredField(ObfuscatedNames.isaacCipherFieldName);
+            isaacField.setAccessible(true);
+            Object isaacObject = isaacField.get(getPacketWriteObject());
+            isaacField.setAccessible(false);
+            return isaacObject;
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    public static Class getIsaacClass(){
+        return getIsaacObject().getClass();
+    }
+    public static Class getPacketBufferNodeClass(){
+        return loadClassFromClientClassLoader(ObfuscatedNames.packetBufferNodeClassName);
+    }
+    public static Object getPacketWriteObject(){
+        Field packetWriterField = getPacketWriterField();
+        packetWriterField.setAccessible(true);
+        try {
+            Object packetWriter = packetWriterField.get(null);
+            packetWriterField.setAccessible(false);
+            return packetWriter;
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
-    @SneakyThrows
+
     public static void sendPacket(PacketDef def, Object... objects) {
         Object packetBufferNode = null;
+        Method getPacketBufferNode = getGetPacketBufferNode();
+        Class ClientPacket = getClientPacketClass();
+        Object isaac = getIsaacObject();
         getPacketBufferNode.setAccessible(true);
         long garbageValue = Math.abs(Long.parseLong(ObfuscatedNames.getPacketBufferNodeGarbageValue));
         if (garbageValue < 256) {
-            packetBufferNode = getPacketBufferNode.invoke(null, fetchPacketField(def.name).get(ClientPacket),
-                    isaac, Byte.parseByte(ObfuscatedNames.getPacketBufferNodeGarbageValue));
+            try {
+                packetBufferNode = getPacketBufferNode.invoke(null, fetchPacketField(def.name).get(ClientPacket),
+                        isaac, Byte.parseByte(ObfuscatedNames.getPacketBufferNodeGarbageValue));
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                e.printStackTrace();
+            }
         } else if (garbageValue < 32768) {
-            packetBufferNode = getPacketBufferNode.invoke(null, fetchPacketField(def.name).get(ClientPacket),
-                    isaac, Short.parseShort(ObfuscatedNames.getPacketBufferNodeGarbageValue));
+            try {
+                //System.out.println("getPacketBufferNode: "+getPacketBufferNode);
+                //System.out.println("isaac: "+isaac);
+                packetBufferNode = getPacketBufferNode.invoke(null, fetchPacketField(def.name).get(ClientPacket),
+                        isaac, Short.parseShort(ObfuscatedNames.getPacketBufferNodeGarbageValue));
+                //System.out.println("packetBufferNode: "+packetBufferNode);
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                e.printStackTrace();
+            }
         } else if (garbageValue < Integer.MAX_VALUE) {
-            packetBufferNode = getPacketBufferNode.invoke(null, fetchPacketField(def.name).get(ClientPacket),
-                    isaac, Integer.parseInt(ObfuscatedNames.getPacketBufferNodeGarbageValue));
+            try {
+                packetBufferNode = getPacketBufferNode.invoke(null, fetchPacketField(def.name).get(ClientPacket),
+                        isaac, Integer.parseInt(ObfuscatedNames.getPacketBufferNodeGarbageValue));
+            } catch (IllegalAccessException | InvocationTargetException e) {
+                e.printStackTrace();
+            }
         }
-        Object buffer = packetBufferNode.getClass().getDeclaredField(ObfuscatedNames.packetBufferFieldName).get(packetBufferNode);
+        Object buffer = null;
+        try {
+            buffer = packetBufferNode.getClass().getDeclaredField(ObfuscatedNames.packetBufferFieldName).get(packetBufferNode);
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            e.printStackTrace();
+        }
         getPacketBufferNode.setAccessible(false);
         List<String> params = null;
         if (def.type == PacketType.RESUME_PAUSEBUTTON) {
@@ -124,11 +180,15 @@ public class PacketReflection {
                 int index = params.indexOf(def.writeData[i]);
                 Object writeValue = objects[index];
                 for (String s : def.writeMethods[i]) {
+                    //System.out.println("Writing " + s + " " + writeValue);
                     BufferMethods.writeValue(s, (Integer) writeValue, buffer);
                 }
             }
+            Field PACKETWRITER = getPacketWriterField();
             PACKETWRITER.setAccessible(true);
             try {
+                //System.out.println(PACKETWRITER);
+                //System.out.println(PACKETWRITER.get(null));
                 addNode(PACKETWRITER.get(null), packetBufferNode);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -152,6 +212,7 @@ public class PacketReflection {
                     addNode.invoke(packetWriter, packetBufferNode, Short.parseShort(ObfuscatedNames.addNodeGarbageValue));
                 } else if (garbageValue < Integer.MAX_VALUE) {
                     addNode = packetWriter.getClass().getDeclaredMethod(ObfuscatedNames.addNodeMethodName, packetBufferNode.getClass(), int.class);
+                    //System.out.println("addnode: "+addNode);
                     addNode.setAccessible(true);
                     addNode.invoke(packetWriter, packetBufferNode, Integer.parseInt(ObfuscatedNames.addNodeGarbageValue));
                 }
@@ -184,9 +245,15 @@ public class PacketReflection {
         }
     }
 
-    @SneakyThrows
+
     static Field fetchPacketField(String name) {
-        return ClientPacket.getDeclaredField(name);
+        try {
+            Class ClientPacket = getClientPacketClass();
+            return ClientPacket.getDeclaredField(name);
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
 
